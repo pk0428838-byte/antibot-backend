@@ -1,0 +1,14 @@
+services:
+  antibot:
+    build: .
+    container_name: antibot
+    restart: unless-stopped
+    ports:
+      - "80:8000"
+    environment:
+      DB_PATH: /data/antibot.db
+      TG_BOT_TOKEN: "${TG_BOT_TOKEN}"
+      TG_SECRET: "${TG_SECRET}"
+      ADMIN_CHAT_IDS: "${ADMIN_CHAT_IDS}"
+    volumes:
+      - ./data:/data
