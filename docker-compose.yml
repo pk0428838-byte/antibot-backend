@@ -9,6 +9,20 @@ services:
       - DB_PATH=/data/antibot.db
     volumes:
       - ./data:/data
+      - ./static:/app/static
+      - ./antibot.js:/app/antibot.js
     ports:
       - "127.0.0.1:8000:8000"
     command: ["uvicorn","app:app","--host","0.0.0.0","--port","8000"]
+
+  tg:
+    container_name: antibot-tg
+    build: .
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - TG_STATE_PATH=/data/tg_state.json
+    volumes:
+      - ./data:/data
+    command: ["python","tg_bot.py"]
