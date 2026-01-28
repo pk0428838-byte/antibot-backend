@@ -2,6 +2,7 @@ import os, time, sqlite3
 import requests
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import HTMLResponse
+from fastapi.middleware.cors import CORSMiddleware
 
 DB_PATH = os.environ.get("DB_PATH", "/data/antibot.db")
 
@@ -10,6 +11,15 @@ TG_SECRET = os.environ.get("TG_SECRET", "")
 ADMIN_CHAT_IDS = [x.strip() for x in os.environ.get("ADMIN_CHAT_IDS", "").split(",") if x.strip()]
 
 app = FastAPI()
+
+# CORS чтобы сайты могли дергать /collect из браузера
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],      # потом можно сузить
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 def db():
@@ -128,7 +138,6 @@ async def collect(req: Request):
 
     con = db()
 
-    # история телефонов/имён по одному visitor_id
     prev_phones = {r[0] for r in con.execute(
         "SELECT DISTINCT phone_digits FROM leads WHERE visitor_id=? AND phone_digits!=''",
         (visitor_id,)
@@ -144,7 +153,6 @@ async def collect(req: Request):
         (ts, site, visitor_id, phone_digits, phone_raw, name),
     )
 
-    # уведомления если новый телефон/имя и уже были другие
     if phone_digits and (len(prev_phones) >= 1 and phone_digits not in prev_phones):
         try:
             con.execute("INSERT INTO alerts_sent(visitor_id, kind, value, ts) VALUES(?,?,?,?)",
@@ -216,7 +224,12 @@ async def tg_webhook(req: Request):
             else:
                 out = ["Найдено:"]
                 for ts, site, vid, ph, nm in rows:
-                    out.append(f"- {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(ts))} | {site}\n  vid: {vid}\n  phone: {ph}\n  name: {nm or '-'}")
+                    out.append(
+                        f"- {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(ts))} | {site}\n"
+                        f"  vid: {vid}\n"
+                        f"  phone: {ph}\n"
+                        f"  name: {nm or '-'}"
+                    )
                 reply("\n".join(out))
 
     elif cmd == "/blockvid":
@@ -242,4 +255,5 @@ async def tg_webhook(req: Request):
         reply("Команды:\n/find <phone>\n/blockvid <vid>\n/unblockvid <vid>")
 
     con.close()
-    return {"ok": True}
+    return {"ok": True
+    }
