@@ -1,3 +1,5 @@
+version: "3.9"
+
 services:
   antibot:
     container_name: antibot
@@ -8,7 +10,7 @@ services:
       - .env
 
     environment:
-      - DB_PATH=/data/antibot.db
+      DB_PATH: /data/antibot.db
 
     volumes:
       - ./data:/data
