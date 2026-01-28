@@ -1,7 +1,7 @@
 import os, time, sqlite3
 import requests
 from fastapi import FastAPI, Request, HTTPException
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 DB_PATH = os.environ.get("DB_PATH", "/data/antibot.db")
@@ -10,17 +10,24 @@ TG_BOT_TOKEN = os.environ.get("TG_BOT_TOKEN", "")
 TG_SECRET = os.environ.get("TG_SECRET", "")
 ADMIN_CHAT_IDS = [x.strip() for x in os.environ.get("ADMIN_CHAT_IDS", "").split(",") if x.strip()]
 
+# CORS: чтобы /collect и /is_blocked можно было дергать с любых сайтов
+# Пример: CORS_ALLOW_ORIGINS=*
+# Или: CORS_ALLOW_ORIGINS=https://site1.ru,https://site2.ru
+CORS_ALLOW_ORIGINS = os.environ.get("CORS_ALLOW_ORIGINS", "*").strip()
+if CORS_ALLOW_ORIGINS == "*" or not CORS_ALLOW_ORIGINS:
+    ALLOW_ORIGINS = ["*"]
+else:
+    ALLOW_ORIGINS = [x.strip() for x in CORS_ALLOW_ORIGINS.split(",") if x.strip()]
+
 app = FastAPI()
 
-# CORS чтобы сайты могли дергать /collect из браузера
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],      # потом можно сузить
-    allow_credentials=True,
+    allow_origins=ALLOW_ORIGINS,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
 
 def db():
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
@@ -56,13 +63,11 @@ def db():
     con.commit()
     return con
 
-
 def norm_phone_digits(raw: str) -> str:
     d = "".join(ch for ch in (raw or "") if ch.isdigit())
     if len(d) == 11 and d.startswith("8"):
         d = "7" + d[1:]
     return d
-
 
 def tg_send(chat_id: str, text: str):
     if not TG_BOT_TOKEN:
@@ -76,19 +81,16 @@ def tg_send(chat_id: str, text: str):
     except Exception:
         pass
 
-
 def tg_broadcast(text: str):
     for cid in ADMIN_CHAT_IDS:
         tg_send(cid, text)
-
 
 def ensure_admin(chat_id: str) -> bool:
     if not ADMIN_CHAT_IDS:
         return True
     return chat_id in ADMIN_CHAT_IDS
 
-
-# ----- bridge для "глобального visitor_id" (для мультисайта) -----
+# ----- bridge для "глобального visitor_id" -----
 BRIDGE_HTML = """<!doctype html><html><head><meta charset="utf-8"></head><body>
 <script>
 (function(){
@@ -107,10 +109,13 @@ BRIDGE_HTML = """<!doctype html><html><head><meta charset="utf-8"></head><body>
 </script></body></html>
 """
 
+@app.get("/", response_class=JSONResponse)
+def root():
+    return {"ok": True}
+
 @app.get("/bridge", response_class=HTMLResponse)
 def bridge():
     return HTMLResponse(BRIDGE_HTML)
-
 
 @app.get("/is_blocked")
 def is_blocked(vid: str = ""):
@@ -120,7 +125,6 @@ def is_blocked(vid: str = ""):
     row = con.execute("SELECT 1 FROM blocks WHERE visitor_id = ?", (vid,)).fetchone()
     con.close()
     return {"blocked": bool(row)}
-
 
 @app.post("/collect")
 async def collect(req: Request):
@@ -183,7 +187,6 @@ async def collect(req: Request):
     con.close()
     return {"ok": True}
 
-
 @app.post("/tg")
 async def tg_webhook(req: Request):
     if TG_SECRET:
@@ -224,12 +227,7 @@ async def tg_webhook(req: Request):
             else:
                 out = ["Найдено:"]
                 for ts, site, vid, ph, nm in rows:
-                    out.append(
-                        f"- {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(ts))} | {site}\n"
-                        f"  vid: {vid}\n"
-                        f"  phone: {ph}\n"
-                        f"  name: {nm or '-'}"
-                    )
+                    out.append(f"- {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(ts))} | {site}\n  vid: {vid}\n  phone: {ph}\n  name: {nm or '-'}")
                 reply("\n".join(out))
 
     elif cmd == "/blockvid":
@@ -255,5 +253,4 @@ async def tg_webhook(req: Request):
         reply("Команды:\n/find <phone>\n/blockvid <vid>\n/unblockvid <vid>")
 
     con.close()
-    return {"ok": True
-    }
+    return {"ok": True}
