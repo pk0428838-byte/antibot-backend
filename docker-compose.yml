@@ -1,14 +1,22 @@
+version: "3.9"
+
 services:
   antibot:
     build: .
     container_name: antibot
     restart: unless-stopped
-    ports:
-      - "80:8000"
+
+    env_file:
+      - .env
+
     environment:
-      DB_PATH: /data/antibot.db
-      TG_BOT_TOKEN: "${TG_BOT_TOKEN}"
-      TG_SECRET: "${TG_SECRET}"
-      ADMIN_CHAT_IDS: "${ADMIN_CHAT_IDS}"
+      - DB_PATH=/data/antibot.db
+
     volumes:
       - ./data:/data
+
+    # наружу не светим контейнер — только локально
+    ports:
+      - "127.0.0.1:8000:8000"
+
+    command: ["uvicorn","app:app","--host","0.0.0.0","--port","8000"]
